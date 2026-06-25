@@ -1,9 +1,9 @@
-const CACHE_NAME = "nana-v6";
+const CACHE_NAME = "nana-v7";
 const ASSETS = [
   "/",
   "/index.html",
-  "/styles.css",
-  "/app.js",
+  "/styles.css?v=nana-v7",
+  "/app.js?v=nana-v7",
   "/firebase-config.js",
   "/manifest.webmanifest",
   "/icon.svg"
