@@ -1,0 +1,52 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isFamilyMember(familyId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/families/$(familyId)/members/$(request.auth.uid));
+    }
+
+    match /users/{userId} {
+      allow read, update, delete: if signedIn() && request.auth.uid == userId;
+      allow create: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /families/{familyId} {
+      allow read: if isFamilyMember(familyId);
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isFamilyMember(familyId);
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+
+      match /members/{memberId} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if signedIn() && (
+          get(/databases/$(database)/documents/families/$(familyId)).data.ownerUid == request.auth.uid
+          || (
+            request.auth.uid == memberId
+            && request.resource.data.inviteCode == get(/databases/$(database)/documents/families/$(familyId)).data.inviteCode
+          )
+        );
+        allow update: if isFamilyMember(familyId) && request.auth.uid == memberId;
+        allow delete: if isFamilyMember(familyId)
+          && (
+            request.auth.uid == memberId
+            || get(/databases/$(database)/documents/families/$(familyId)).data.ownerUid == request.auth.uid
+          );
+      }
+
+      match /events/{eventId} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if isFamilyMember(familyId)
+          && request.resource.data.createdBy == request.auth.uid;
+        allow update, delete: if isFamilyMember(familyId)
+          && resource.data.createdBy == request.auth.uid;
+      }
+    }
+  }
+}
