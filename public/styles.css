@@ -470,6 +470,12 @@ button {
   white-space: nowrap;
 }
 
+.event-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .icon-btn {
   width: 34px;
   height: 34px;

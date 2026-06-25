@@ -62,8 +62,12 @@ const t = {
     language: "Language",
     signOut: "Sign out",
     save: "Save",
+    update: "Update",
     cancel: "Cancel",
     delete: "Delete",
+    edit: "Edit",
+    eventDate: "Date",
+    eventTime: "Time",
     bottle: "Bottle",
     breast: "Breast",
     solids: "Solids",
@@ -130,8 +134,12 @@ const t = {
     language: "Idioma",
     signOut: "Cerrar sesión",
     save: "Guardar",
+    update: "Actualizar",
     cancel: "Cancelar",
     delete: "Eliminar",
+    edit: "Editar",
+    eventDate: "Fecha",
+    eventTime: "Hora",
     bottle: "Biberón",
     breast: "Pecho",
     solids: "Sólidos",
@@ -169,6 +177,7 @@ const iconPaths = {
   diaper: '<path d="M4.4 7.3c2.8 1.2 5.3 1.8 7.6 1.8s4.8-.6 7.6-1.8v6.1a6.2 6.2 0 0 1-6.2 6.2h-2.8a6.2 6.2 0 0 1-6.2-6.2V7.3Z"/><path d="M4.4 7.3l2-3.1c1.9 1 3.8 1.5 5.6 1.5s3.7-.5 5.6-1.5l2 3.1M8.2 14.5h.1M15.7 14.5h.1"/>',
   poop: '<path d="M8.2 11.2c.6-2 2.1-3.1 4.3-3.1 2.6 0 4.4 1.5 4.4 3.6 1.8.5 3 1.8 3 3.7 0 2.6-2.2 4.4-5 4.4H9.1c-2.8 0-5-1.8-5-4.4 0-2.2 1.6-3.8 4.1-4.2Z"/><path d="M11.2 8c.2-1.7 1.1-3 2.8-3.8M9.5 15.8h.1M14.5 15.8h.1"/>',
   note: '<path d="M6 4.8h9.2L18 7.6v11.6H6V4.8Z"/><path d="M15.2 4.8v3h2.9M8.5 11h7M8.5 14h7M8.5 17h4.2"/>',
+  edit: '<path d="M4.4 19.6h4.2L19 9.2 14.8 5 4.4 15.4v4.2Z"/><path d="M13.7 6.1l4.2 4.2"/>',
   copy: '<path d="M8 8h10v11H8z"/><path d="M6 16H4V5h10v2"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
   google: '<path d="M21.6 12.2c0-.7-.1-1.3-.2-1.9H12v3.6h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.8 3-4.4 3-7.2Z"/><path d="M12 22c2.7 0 5-0.9 6.6-2.5l-3.2-2.5c-.9.6-2 .9-3.4.9-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22Z"/><path d="M6.4 13.8A6 6 0 0 1 6 12c0-.6.1-1.2.4-1.8V7.6H3.1A10 10 0 0 0 3.1 16.4l3.3-2.6Z"/><path d="M12 6.1c1.5 0 2.8.5 3.9 1.5l2.9-2.9A9.8 9.8 0 0 0 12 2 10 10 0 0 0 3.1 7.6l3.3 2.6C7.2 7.9 9.4 6.1 12 6.1Z"/>'
@@ -259,6 +268,34 @@ function localDateKey(date) {
 
 function dateFromLocalKey(key) {
   return new Date(`${key}T12:00:00`);
+}
+
+function localTimeKey(date) {
+  const h = String(date.getHours()).padStart(2, "0");
+  const m = String(date.getMinutes()).padStart(2, "0");
+  return `${h}:${m}`;
+}
+
+function dateFromLocalDateTime(dateKey, timeKey) {
+  return new Date(`${dateKey}T${timeKey}:00`);
+}
+
+function sortEventsDescending(events) {
+  return [...events].sort((a, b) => dateFromEvent(b) - dateFromEvent(a));
+}
+
+function isCareType(type) {
+  return type === "sleep_start" || type === "wake_up";
+}
+
+function editableEvent() {
+  if (!String(state.sheet || "").startsWith("edit:")) return null;
+  const eventId = state.sheet.slice(5);
+  return state.events.find((event) => event.id === eventId) || null;
+}
+
+function canManageEvent() {
+  return state.mode === "demo" || Boolean(state.user && state.familyId);
 }
 
 function duration(ms) {
@@ -512,10 +549,10 @@ function todayHtml() {
 
       <section class="section">
         <div class="quick-grid">
-          <button type="button" class="btn quick-btn" data-action="quick" data-type="sleep_start">
+          <button type="button" class="btn quick-btn" data-action="open-sheet" data-sheet="sleep_start">
             <span class="icon sleep">${iconSvg("moon", msg("sleep"))}</span><span>${escapeHtml(msg("sleep"))}</span>
           </button>
-          <button type="button" class="btn quick-btn" data-action="quick" data-type="wake_up">
+          <button type="button" class="btn quick-btn" data-action="open-sheet" data-sheet="wake_up">
             <span class="icon awake">${iconSvg("sun", msg("wakeUp"))}</span><span>${escapeHtml(msg("wakeUp"))}</span>
           </button>
           <button type="button" class="btn quick-btn" data-action="open-sheet" data-sheet="feed">
@@ -677,6 +714,8 @@ function timelineHtml(events) {
         const icon = iconFor(event);
         const owner = eventOwner(event);
         const notes = event.note && event.type !== "note" ? ` · ${event.note}` : "";
+        const canManage = canManageEvent(event);
+        const canEditCare = canManage && isCareType(event.type);
         return `
           <article class="event">
             <time class="event-time">${escapeHtml(formatTime(dateFromEvent(event)))}</time>
@@ -685,7 +724,12 @@ function timelineHtml(events) {
               <div class="event-label">${escapeHtml(labelFor(event))}</div>
               <div class="event-meta">${escapeHtml(`${msg("addedBy")} ${owner}${notes}`)}</div>
             </div>
-            <button type="button" class="icon-btn" data-action="delete-event" data-id="${escapeHtml(event.id)}" aria-label="${escapeHtml(msg("delete"))}">${iconSvg("close", msg("delete"))}</button>
+            ${canManage ? `
+              <div class="event-actions">
+                ${canEditCare ? `<button type="button" class="icon-btn" data-action="edit-event" data-id="${escapeHtml(event.id)}" aria-label="${escapeHtml(msg("edit"))}">${iconSvg("edit", msg("edit"))}</button>` : ""}
+                <button type="button" class="icon-btn" data-action="delete-event" data-id="${escapeHtml(event.id)}" aria-label="${escapeHtml(msg("delete"))}">${iconSvg("close", msg("delete"))}</button>
+              </div>
+            ` : ""}
           </article>
         `;
       }).join("")}
@@ -694,8 +738,22 @@ function timelineHtml(events) {
 }
 
 function sheetHtml() {
-  const title = state.sheet === "feed" ? msg("feed") : state.sheet === "note" ? msg("note") : msg("diaper");
-  const content = state.sheet === "feed" ? feedFormHtml() : state.sheet === "note" ? noteFormHtml() : diaperFormHtml(state.sheet === "poop");
+  const eventToEdit = editableEvent();
+  const careType = eventToEdit ? eventToEdit.type : state.sheet;
+  const title = isCareType(careType)
+    ? msg(careType === "sleep_start" ? "sleep" : "wakeUp")
+    : state.sheet === "feed"
+      ? msg("feed")
+      : state.sheet === "note"
+        ? msg("note")
+        : msg("diaper");
+  const content = isCareType(careType)
+    ? careFormHtml(careType, eventToEdit)
+    : state.sheet === "feed"
+      ? feedFormHtml()
+      : state.sheet === "note"
+        ? noteFormHtml()
+        : diaperFormHtml(state.sheet === "poop");
   return `
     <div class="sheet-backdrop" data-action="close-sheet">
       <section class="sheet" role="dialog" aria-modal="true" data-sheet-panel>
@@ -706,6 +764,32 @@ function sheetHtml() {
         ${content}
       </section>
     </div>
+  `;
+}
+
+function careFormHtml(type, eventToEdit = null) {
+  const selectedDate = eventToEdit ? dateFromEvent(eventToEdit) : new Date();
+  const eventIdInput = eventToEdit ? `<input type="hidden" name="eventId" value="${escapeHtml(eventToEdit.id)}">` : "";
+  return `
+    <form class="form" data-form="event-care">
+      <input type="hidden" name="careType" value="${escapeHtml(type)}">
+      ${eventIdInput}
+      <div class="split">
+        <div class="field">
+          <label for="careDate">${escapeHtml(msg("eventDate"))}</label>
+          <input id="careDate" name="eventDate" type="date" value="${escapeHtml(localDateKey(selectedDate))}" required>
+        </div>
+        <div class="field">
+          <label for="careTime">${escapeHtml(msg("eventTime"))}</label>
+          <input id="careTime" name="eventTime" type="time" value="${escapeHtml(localTimeKey(selectedDate))}" required>
+        </div>
+      </div>
+      <div class="field">
+        <label for="careNotes">${escapeHtml(msg("notes"))} (${escapeHtml(msg("optional"))})</label>
+        <textarea id="careNotes" name="note">${escapeHtml(eventToEdit?.note || "")}</textarea>
+      </div>
+      <button type="submit" class="btn primary">${escapeHtml(eventToEdit ? msg("update") : msg("save"))}</button>
+    </form>
   `;
 }
 
@@ -791,15 +875,16 @@ function noteFormHtml() {
 }
 
 async function addEvent(data) {
+  const timestamp = data.timestamp || nowIso();
   const event = {
     ...data,
-    timestamp: nowIso(),
+    timestamp,
     createdBy: state.user.uid,
     createdByName: state.user.displayName || "Gustavo"
   };
 
   if (state.mode === "demo") {
-    state.events = [{ id: id(), ...event }, ...state.events];
+    state.events = sortEventsDescending([{ id: id(), ...event }, ...state.events]);
     saveDemo();
     render();
     return;
@@ -810,6 +895,29 @@ async function addEvent(data) {
     timestamp: fb.Timestamp.fromDate(new Date(event.timestamp)),
     createdAt: fb.serverTimestamp()
   });
+}
+
+async function updateEvent(eventId, data) {
+  const timestamp = data.timestamp || nowIso();
+  const patch = {
+    timestamp,
+    note: data.note || ""
+  };
+
+  if (state.mode === "demo") {
+    state.events = sortEventsDescending(state.events.map((event) => (
+      event.id === eventId ? { ...event, ...patch } : event
+    )));
+    saveDemo();
+    render();
+    return;
+  }
+
+  await fb.setDoc(fb.doc(fb.db, "families", state.familyId, "events", eventId), {
+    ...patch,
+    timestamp: fb.Timestamp.fromDate(new Date(timestamp)),
+    updatedAt: fb.serverTimestamp()
+  }, { merge: true });
 }
 
 async function deleteEvent(eventId) {
@@ -1120,9 +1228,12 @@ app.addEventListener("click", async (event) => {
       localStorage.removeItem("nana.historyDate");
       render();
     }
-    if (action === "quick") await addEvent({ type: target.dataset.type });
     if (action === "open-sheet") {
       state.sheet = target.dataset.sheet;
+      render();
+    }
+    if (action === "edit-event") {
+      state.sheet = `edit:${target.dataset.id}`;
       render();
     }
     if (action === "close-sheet") {
@@ -1165,6 +1276,22 @@ app.addEventListener("submit", async (event) => {
     state.error = "";
     if (form.dataset.form === "create-family") await createFamily(form);
     if (form.dataset.form === "join-family") await joinFamily(form);
+    if (form.dataset.form === "event-care") {
+      const data = Object.fromEntries(new FormData(form));
+      const selectedDate = dateFromLocalDateTime(data.eventDate, data.eventTime);
+      if (Number.isNaN(selectedDate.getTime())) return;
+      const payload = {
+        timestamp: selectedDate.toISOString(),
+        note: data.note.trim()
+      };
+      if (data.eventId) {
+        await updateEvent(data.eventId, payload);
+      } else {
+        await addEvent({ ...payload, type: data.careType });
+      }
+      state.sheet = null;
+      render();
+    }
     if (form.dataset.form === "event-feed") {
       const data = Object.fromEntries(new FormData(form));
       await addEvent({

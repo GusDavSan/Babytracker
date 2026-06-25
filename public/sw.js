@@ -1,4 +1,4 @@
-const CACHE_NAME = "nana-v4";
+const CACHE_NAME = "nana-v5";
 const ASSETS = [
   "/",
   "/index.html",
