@@ -418,6 +418,41 @@ button {
   font-weight: 700;
 }
 
+.day-summary {
+  margin-bottom: 10px;
+}
+
+.mini-title {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.sleep-blocks {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(109, 127, 240, 0.09);
+}
+
+.sleep-session {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 34px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.sleep-session strong {
+  color: var(--sleep);
+  white-space: nowrap;
+}
+
 .timeline {
   display: grid;
   gap: 8px;

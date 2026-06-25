@@ -68,6 +68,12 @@ const t = {
     edit: "Edit",
     eventDate: "Date",
     eventTime: "Time",
+    now: "Now",
+    from: "From",
+    to: "To",
+    sleepSessions: "Sleep sessions",
+    exportData: "Export data",
+    exportCsv: "Export CSV",
     bottle: "Bottle",
     breast: "Breast",
     solids: "Solids",
@@ -140,6 +146,12 @@ const t = {
     edit: "Editar",
     eventDate: "Fecha",
     eventTime: "Hora",
+    now: "Ahora",
+    from: "Desde",
+    to: "Hasta",
+    sleepSessions: "Periodos de sueño",
+    exportData: "Exportar datos",
+    exportCsv: "Exportar CSV",
     bottle: "Biberón",
     breast: "Pecho",
     solids: "Sólidos",
@@ -177,8 +189,9 @@ const iconPaths = {
   diaper: '<path d="M4.4 7.3c2.8 1.2 5.3 1.8 7.6 1.8s4.8-.6 7.6-1.8v6.1a6.2 6.2 0 0 1-6.2 6.2h-2.8a6.2 6.2 0 0 1-6.2-6.2V7.3Z"/><path d="M4.4 7.3l2-3.1c1.9 1 3.8 1.5 5.6 1.5s3.7-.5 5.6-1.5l2 3.1M8.2 14.5h.1M15.7 14.5h.1"/>',
   poop: '<path d="M8.2 11.2c.6-2 2.1-3.1 4.3-3.1 2.6 0 4.4 1.5 4.4 3.6 1.8.5 3 1.8 3 3.7 0 2.6-2.2 4.4-5 4.4H9.1c-2.8 0-5-1.8-5-4.4 0-2.2 1.6-3.8 4.1-4.2Z"/><path d="M11.2 8c.2-1.7 1.1-3 2.8-3.8M9.5 15.8h.1M14.5 15.8h.1"/>',
   note: '<path d="M6 4.8h9.2L18 7.6v11.6H6V4.8Z"/><path d="M15.2 4.8v3h2.9M8.5 11h7M8.5 14h7M8.5 17h4.2"/>',
-  edit: '<path d="M4.4 19.6h4.2L19 9.2 14.8 5 4.4 15.4v4.2Z"/><path d="M13.7 6.1l4.2 4.2"/>',
-  copy: '<path d="M8 8h10v11H8z"/><path d="M6 16H4V5h10v2"/>',
+	  edit: '<path d="M4.4 19.6h4.2L19 9.2 14.8 5 4.4 15.4v4.2Z"/><path d="M13.7 6.1l4.2 4.2"/>',
+	  download: '<path d="M12 3.5v11"/><path d="m7.5 10 4.5 4.5 4.5-4.5"/><path d="M5 18.5h14"/>',
+	  copy: '<path d="M8 8h10v11H8z"/><path d="M6 16H4V5h10v2"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
   google: '<path d="M21.6 12.2c0-.7-.1-1.3-.2-1.9H12v3.6h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.8 3-4.4 3-7.2Z"/><path d="M12 22c2.7 0 5-0.9 6.6-2.5l-3.2-2.5c-.9.6-2 .9-3.4.9-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22Z"/><path d="M6.4 13.8A6 6 0 0 1 6 12c0-.6.1-1.2.4-1.8V7.6H3.1A10 10 0 0 0 3.1 16.4l3.3-2.6Z"/><path d="M12 6.1c1.5 0 2.8.5 3.9 1.5l2.9-2.9A9.8 9.8 0 0 0 12 2 10 10 0 0 0 3.1 7.6l3.3 2.6C7.2 7.9 9.4 6.1 12 6.1Z"/>'
 };
@@ -288,6 +301,10 @@ function isCareType(type) {
   return type === "sleep_start" || type === "wake_up";
 }
 
+function isEditableEventType(type) {
+  return ["sleep_start", "wake_up", "feed", "diaper", "note"].includes(type);
+}
+
 function editableEvent() {
   if (!String(state.sheet || "").startsWith("edit:")) return null;
   const eventId = state.sheet.slice(5);
@@ -316,6 +333,13 @@ function isToday(date) {
   return date >= startOfToday();
 }
 
+function dayRangeFromKey(key) {
+  const start = new Date(`${key}T00:00:00`);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 1);
+  return { start, end };
+}
+
 function iconFor(event) {
   if (event.type === "sleep_start") return { className: "sleep", name: "moon", label: msg("sleep") };
   if (event.type === "wake_up") return { className: "awake", name: "sun", label: msg("wakeUp") };
@@ -330,7 +354,8 @@ function labelFor(event) {
   if (event.type === "wake_up") return msg("wakeUp");
   if (event.type === "feed") {
     const feedType = msg(event.feedType || "bottle");
-    const amount = event.amountMl ? ` ${event.amountMl} ml` : "";
+    const amountValue = String(event.amountMl || "").trim();
+    const amount = amountValue ? ` ${amountValue}${/[a-zA-Z]/.test(amountValue) ? "" : " ml"}` : "";
     return `${feedType}${amount}`;
   }
   if (event.type === "diaper") {
@@ -380,6 +405,58 @@ function todaySleepMs() {
 
 function todayEvents() {
   return state.events.filter((event) => isToday(dateFromEvent(event)));
+}
+
+function sleepSessionsForRange(start, end) {
+  const sleepEvents = state.events
+    .filter((event) => event.type === "sleep_start" || event.type === "wake_up")
+    .sort((a, b) => dateFromEvent(a) - dateFromEvent(b));
+  const sessions = [];
+  let openStart = null;
+
+  const addSession = (sessionStart, sessionEnd, ongoing = false) => {
+    if (!sessionStart || !sessionEnd || sessionEnd <= sessionStart) return;
+    const clampedStart = new Date(Math.max(sessionStart.getTime(), start.getTime()));
+    const clampedEnd = new Date(Math.min(sessionEnd.getTime(), end.getTime()));
+    if (clampedEnd <= clampedStart) return;
+    sessions.push({
+      start: sessionStart,
+      end: sessionEnd,
+      clampedStart,
+      clampedEnd,
+      ongoing,
+      ms: clampedEnd - clampedStart
+    });
+  };
+
+  for (const event of sleepEvents) {
+    const date = dateFromEvent(event);
+    if (event.type === "sleep_start") {
+      openStart = date;
+    } else if (openStart) {
+      addSession(openStart, date);
+      openStart = null;
+    }
+  }
+
+  if (openStart) {
+    addSession(openStart, new Date(), true);
+  }
+
+  return sessions.sort((a, b) => b.clampedStart - a.clampedStart);
+}
+
+function sleepMsForRange(start, end) {
+  return sleepSessionsForRange(start, end).reduce((total, session) => total + session.ms, 0);
+}
+
+function daySummary(key, events) {
+  const { start, end } = dayRangeFromKey(key);
+  return {
+    sleepMs: sleepMsForRange(start, end),
+    feeds: events.filter((event) => event.type === "feed").length,
+    diapers: events.filter((event) => event.type === "diaper").length
+  };
 }
 
 function eventOwner(event) {
@@ -600,6 +677,11 @@ function historyHtml() {
   const filteredEvents = state.historyDate
     ? state.events.filter((event) => localDateKey(dateFromEvent(event)) === state.historyDate)
     : [];
+  const selectedRange = state.historyDate ? dayRangeFromKey(state.historyDate) : null;
+  const hasSelectedData = Boolean(
+    filteredEvents.length
+    || (selectedRange && sleepSessionsForRange(selectedRange.start, selectedRange.end).length)
+  );
 
   return `
     <main class="scroll">
@@ -614,11 +696,17 @@ function historyHtml() {
       ${state.historyDate ? `
         <section class="card">
           <div class="section-title"><h3>${escapeHtml(formatDateLong(dateFromLocalKey(state.historyDate)))}</h3></div>
-          ${filteredEvents.length ? timelineHtml(filteredEvents) : `<div class="empty">${escapeHtml(msg("noEventsOnDate"))}</div>`}
+          ${hasSelectedData ? `
+            ${daySummaryHtml(state.historyDate, filteredEvents)}
+            ${sleepSessionsHtml(state.historyDate)}
+            ${filteredEvents.length ? timelineHtml(filteredEvents) : ""}
+          ` : `<div class="empty">${escapeHtml(msg("noEventsOnDate"))}</div>`}
         </section>
       ` : Array.from(groups.entries()).map(([key, events]) => `
           <section class="card">
             <div class="section-title"><h3>${escapeHtml(formatDateLong(dateFromLocalKey(key)))}</h3></div>
+            ${daySummaryHtml(key, events)}
+            ${sleepSessionsHtml(key)}
             ${timelineHtml(events)}
           </section>
         `).join("") || `<div class="empty">${escapeHtml(msg("noEvents"))}</div>`}
@@ -700,9 +788,49 @@ function settingsHtml() {
       </section>
 
       <section class="card settings-list">
+        <div class="section-title"><h3>${escapeHtml(msg("exportData"))}</h3></div>
+        <button type="button" class="btn ghost" data-action="export-csv">
+          ${iconSvg("download", msg("exportCsv"))}
+          <span>${escapeHtml(msg("exportCsv"))}</span>
+        </button>
+      </section>
+
+      <section class="card settings-list">
         <button type="button" class="btn danger" data-action="sign-out">${escapeHtml(msg("signOut"))}</button>
       </section>
     </main>
+  `;
+}
+
+function daySummaryHtml(key, events) {
+  const summary = daySummary(key, events);
+  return `
+    <div class="summary-grid day-summary">
+      <div class="metric"><strong>${escapeHtml(duration(summary.sleepMs))}</strong><span>${escapeHtml(msg("sleepTotal"))}</span></div>
+      <div class="metric"><strong>${summary.feeds}</strong><span>${escapeHtml(msg("feeds"))}</span></div>
+      <div class="metric"><strong>${summary.diapers}</strong><span>${escapeHtml(msg("diapers"))}</span></div>
+    </div>
+  `;
+}
+
+function sleepSessionsHtml(key) {
+  const { start, end } = dayRangeFromKey(key);
+  const sessions = sleepSessionsForRange(start, end);
+  if (!sessions.length) return "";
+  const isTodayKey = key === localDateKey(new Date());
+  return `
+    <div class="sleep-blocks">
+      <div class="mini-title">${escapeHtml(msg("sleepSessions"))}</div>
+      ${sessions.map((session) => {
+        const endLabel = session.ongoing && isTodayKey ? msg("now") : formatTime(session.clampedEnd);
+        return `
+          <div class="sleep-session">
+            <span>${escapeHtml(formatTime(session.clampedStart))} → ${escapeHtml(endLabel)}</span>
+            <strong>${escapeHtml(duration(session.ms))}</strong>
+          </div>
+        `;
+      }).join("")}
+    </div>
   `;
 }
 
@@ -715,7 +843,7 @@ function timelineHtml(events) {
         const owner = eventOwner(event);
         const notes = event.note && event.type !== "note" ? ` · ${event.note}` : "";
         const canManage = canManageEvent(event);
-        const canEditCare = canManage && isCareType(event.type);
+        const canEdit = canManage && isEditableEventType(event.type);
         return `
           <article class="event">
             <time class="event-time">${escapeHtml(formatTime(dateFromEvent(event)))}</time>
@@ -726,7 +854,7 @@ function timelineHtml(events) {
             </div>
             ${canManage ? `
               <div class="event-actions">
-                ${canEditCare ? `<button type="button" class="icon-btn" data-action="edit-event" data-id="${escapeHtml(event.id)}" aria-label="${escapeHtml(msg("edit"))}">${iconSvg("edit", msg("edit"))}</button>` : ""}
+                ${canEdit ? `<button type="button" class="icon-btn" data-action="edit-event" data-id="${escapeHtml(event.id)}" aria-label="${escapeHtml(msg("edit"))}">${iconSvg("edit", msg("edit"))}</button>` : ""}
                 <button type="button" class="icon-btn" data-action="delete-event" data-id="${escapeHtml(event.id)}" aria-label="${escapeHtml(msg("delete"))}">${iconSvg("close", msg("delete"))}</button>
               </div>
             ` : ""}
@@ -739,21 +867,21 @@ function timelineHtml(events) {
 
 function sheetHtml() {
   const eventToEdit = editableEvent();
-  const careType = eventToEdit ? eventToEdit.type : state.sheet;
-  const title = isCareType(careType)
-    ? msg(careType === "sleep_start" ? "sleep" : "wakeUp")
-    : state.sheet === "feed"
+  const sheetType = eventToEdit ? eventToEdit.type : state.sheet;
+  const title = isCareType(sheetType)
+    ? msg(sheetType === "sleep_start" ? "sleep" : "wakeUp")
+    : sheetType === "feed"
       ? msg("feed")
-      : state.sheet === "note"
+      : sheetType === "note"
         ? msg("note")
         : msg("diaper");
-  const content = isCareType(careType)
-    ? careFormHtml(careType, eventToEdit)
-    : state.sheet === "feed"
-      ? feedFormHtml()
-      : state.sheet === "note"
-        ? noteFormHtml()
-        : diaperFormHtml(state.sheet === "poop");
+  const content = isCareType(sheetType)
+    ? careFormHtml(sheetType, eventToEdit)
+    : sheetType === "feed"
+      ? feedFormHtml(eventToEdit)
+      : sheetType === "note"
+        ? noteFormHtml(eventToEdit)
+        : diaperFormHtml(state.sheet === "poop", eventToEdit);
   return `
     <div class="sheet-backdrop" data-action="close-sheet">
       <section class="sheet" role="dialog" aria-modal="true" data-sheet-panel>
@@ -767,23 +895,32 @@ function sheetHtml() {
   `;
 }
 
-function careFormHtml(type, eventToEdit = null) {
+function eventIdInput(eventToEdit) {
+  return eventToEdit ? `<input type="hidden" name="eventId" value="${escapeHtml(eventToEdit.id)}">` : "";
+}
+
+function dateTimeFields(prefix, eventToEdit = null) {
   const selectedDate = eventToEdit ? dateFromEvent(eventToEdit) : new Date();
-  const eventIdInput = eventToEdit ? `<input type="hidden" name="eventId" value="${escapeHtml(eventToEdit.id)}">` : "";
+  return `
+    <div class="split">
+      <div class="field">
+        <label for="${prefix}Date">${escapeHtml(msg("eventDate"))}</label>
+        <input id="${prefix}Date" name="eventDate" type="date" value="${escapeHtml(localDateKey(selectedDate))}" required>
+      </div>
+      <div class="field">
+        <label for="${prefix}Time">${escapeHtml(msg("eventTime"))}</label>
+        <input id="${prefix}Time" name="eventTime" type="time" value="${escapeHtml(localTimeKey(selectedDate))}" required>
+      </div>
+    </div>
+  `;
+}
+
+function careFormHtml(type, eventToEdit = null) {
   return `
     <form class="form" data-form="event-care">
       <input type="hidden" name="careType" value="${escapeHtml(type)}">
-      ${eventIdInput}
-      <div class="split">
-        <div class="field">
-          <label for="careDate">${escapeHtml(msg("eventDate"))}</label>
-          <input id="careDate" name="eventDate" type="date" value="${escapeHtml(localDateKey(selectedDate))}" required>
-        </div>
-        <div class="field">
-          <label for="careTime">${escapeHtml(msg("eventTime"))}</label>
-          <input id="careTime" name="eventTime" type="time" value="${escapeHtml(localTimeKey(selectedDate))}" required>
-        </div>
-      </div>
+      ${eventIdInput(eventToEdit)}
+      ${dateTimeFields("care", eventToEdit)}
       <div class="field">
         <label for="careNotes">${escapeHtml(msg("notes"))} (${escapeHtml(msg("optional"))})</label>
         <textarea id="careNotes" name="note">${escapeHtml(eventToEdit?.note || "")}</textarea>
@@ -793,24 +930,27 @@ function careFormHtml(type, eventToEdit = null) {
   `;
 }
 
-function feedFormHtml() {
+function feedFormHtml(eventToEdit = null) {
+  const feedType = eventToEdit?.feedType || "bottle";
   return `
     <form class="form" data-form="event-feed">
+      ${eventIdInput(eventToEdit)}
+      ${dateTimeFields("feed", eventToEdit)}
       <div class="field">
         <label>${escapeHtml(msg("feedType"))}</label>
         <div class="choice-grid">
           <label class="choice-card">
-            <input type="radio" name="feedType" value="bottle" checked>
+            <input type="radio" name="feedType" value="bottle" ${feedType === "bottle" ? "checked" : ""}>
             <span class="choice-icon feed">${iconSvg("bottle", msg("bottle"))}</span>
             <span>${escapeHtml(msg("bottle"))}</span>
           </label>
           <label class="choice-card">
-            <input type="radio" name="feedType" value="breast">
+            <input type="radio" name="feedType" value="breast" ${feedType === "breast" ? "checked" : ""}>
             <span class="choice-icon feed">${iconSvg("breast", msg("breast"))}</span>
             <span>${escapeHtml(msg("breast"))}</span>
           </label>
           <label class="choice-card">
-            <input type="radio" name="feedType" value="solids">
+            <input type="radio" name="feedType" value="solids" ${feedType === "solids" ? "checked" : ""}>
             <span class="choice-icon feed">${iconSvg("solids", msg("solids"))}</span>
             <span>${escapeHtml(msg("solids"))}</span>
           </label>
@@ -819,57 +959,64 @@ function feedFormHtml() {
       <div class="split">
         <div class="field">
           <label for="amountMl">${escapeHtml(msg("amount"))}</label>
-          <input id="amountMl" name="amountMl" inputmode="numeric" placeholder="90 ml">
+          <input id="amountMl" name="amountMl" inputmode="numeric" placeholder="90 ml" value="${escapeHtml(eventToEdit?.amountMl || "")}">
         </div>
       </div>
       <div class="field">
         <label for="feedNotes">${escapeHtml(msg("notes"))} (${escapeHtml(msg("optional"))})</label>
-        <textarea id="feedNotes" name="note"></textarea>
+        <textarea id="feedNotes" name="note">${escapeHtml(eventToEdit?.note || "")}</textarea>
       </div>
-      <button type="submit" class="btn primary">${escapeHtml(msg("save"))}</button>
+      <button type="submit" class="btn primary">${escapeHtml(eventToEdit ? msg("update") : msg("save"))}</button>
     </form>
   `;
 }
 
-function diaperFormHtml(poopOnly = false) {
+function diaperFormHtml(poopOnly = false, eventToEdit = null) {
+  const peeChecked = eventToEdit ? Boolean(eventToEdit.pee) : !poopOnly;
+  const poopChecked = eventToEdit ? Boolean(eventToEdit.poop) : poopOnly;
+  const consistency = eventToEdit?.consistency || "";
   return `
     <form class="form" data-form="event-diaper">
+      ${eventIdInput(eventToEdit)}
+      ${dateTimeFields("diaper", eventToEdit)}
       <div class="check-row">
         <label class="check-card">
-          <input type="checkbox" name="pee" ${poopOnly ? "" : "checked"}>
+          <input type="checkbox" name="pee" ${peeChecked ? "checked" : ""}>
           <span>${escapeHtml(msg("pee"))}</span>
         </label>
         <label class="check-card">
-          <input type="checkbox" name="poop" ${poopOnly ? "checked" : ""}>
+          <input type="checkbox" name="poop" ${poopChecked ? "checked" : ""}>
           <span>${escapeHtml(msg("poop"))}</span>
         </label>
       </div>
       <div class="field">
         <label for="consistency">${escapeHtml(msg("consistency"))}</label>
         <select id="consistency" name="consistency">
-          <option value="">${escapeHtml(msg("optional"))}</option>
-          <option value="normal">${escapeHtml(msg("normal"))}</option>
-          <option value="liquid">${escapeHtml(msg("liquid"))}</option>
-          <option value="hard">${escapeHtml(msg("hard"))}</option>
+          <option value="" ${consistency === "" ? "selected" : ""}>${escapeHtml(msg("optional"))}</option>
+          <option value="normal" ${consistency === "normal" ? "selected" : ""}>${escapeHtml(msg("normal"))}</option>
+          <option value="liquid" ${consistency === "liquid" ? "selected" : ""}>${escapeHtml(msg("liquid"))}</option>
+          <option value="hard" ${consistency === "hard" ? "selected" : ""}>${escapeHtml(msg("hard"))}</option>
         </select>
       </div>
       <div class="field">
         <label for="diaperNotes">${escapeHtml(msg("notes"))} (${escapeHtml(msg("optional"))})</label>
-        <textarea id="diaperNotes" name="note"></textarea>
+        <textarea id="diaperNotes" name="note">${escapeHtml(eventToEdit?.note || "")}</textarea>
       </div>
-      <button type="submit" class="btn primary">${escapeHtml(msg("save"))}</button>
+      <button type="submit" class="btn primary">${escapeHtml(eventToEdit ? msg("update") : msg("save"))}</button>
     </form>
   `;
 }
 
-function noteFormHtml() {
+function noteFormHtml(eventToEdit = null) {
   return `
     <form class="form" data-form="event-note">
+      ${eventIdInput(eventToEdit)}
+      ${dateTimeFields("note", eventToEdit)}
       <div class="field">
         <label for="noteText">${escapeHtml(msg("note"))}</label>
-        <textarea id="noteText" name="note" required></textarea>
+        <textarea id="noteText" name="note" required>${escapeHtml(eventToEdit?.note || "")}</textarea>
       </div>
-      <button type="submit" class="btn primary">${escapeHtml(msg("save"))}</button>
+      <button type="submit" class="btn primary">${escapeHtml(eventToEdit ? msg("update") : msg("save"))}</button>
     </form>
   `;
 }
@@ -900,8 +1047,8 @@ async function addEvent(data) {
 async function updateEvent(eventId, data) {
   const timestamp = data.timestamp || nowIso();
   const patch = {
-    timestamp,
-    note: data.note || ""
+    ...data,
+    timestamp
   };
 
   if (state.mode === "demo") {
@@ -918,6 +1065,68 @@ async function updateEvent(eventId, data) {
     timestamp: fb.Timestamp.fromDate(new Date(timestamp)),
     updatedAt: fb.serverTimestamp()
   }, { merge: true });
+}
+
+function timestampFromFormData(data) {
+  const selectedDate = dateFromLocalDateTime(data.eventDate, data.eventTime);
+  if (Number.isNaN(selectedDate.getTime())) return null;
+  return selectedDate.toISOString();
+}
+
+function csvCell(value) {
+  const text = value == null ? "" : String(value);
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+function safeFilename(value) {
+  return String(value || "nana")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "nana";
+}
+
+function exportCsv() {
+  const headers = [
+    "timestamp_iso",
+    "date",
+    "time",
+    "type",
+    "label",
+    "feed_type",
+    "amount_ml",
+    "pee",
+    "poop",
+    "consistency",
+    "note",
+    "created_by"
+  ];
+  const rows = sortEventsDescending(state.events).map((event) => {
+    const date = dateFromEvent(event);
+    return [
+      date.toISOString(),
+      localDateKey(date),
+      localTimeKey(date),
+      event.type || "",
+      labelFor(event),
+      event.feedType || "",
+      event.amountMl || "",
+      event.pee ? "yes" : "",
+      event.poop ? "yes" : "",
+	      event.consistency || "",
+	      event.note || "",
+	      event.createdByName || eventOwner(event)
+	    ];
+  });
+  const csv = [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${safeFilename(state.family?.babyName || msg("appName"))}-${localDateKey(new Date())}.csv`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 async function deleteEvent(eventId) {
@@ -1016,7 +1225,7 @@ async function loadFamily(familyId) {
   const q = fb.query(
     fb.collection(fb.db, "families", familyId, "events"),
     fb.orderBy("timestamp", "desc"),
-    fb.limit(120)
+    fb.limit(1000)
   );
 
   state.unsubscribeEvents = fb.onSnapshot(q, (snapshot) => {
@@ -1247,6 +1456,7 @@ app.addEventListener("click", async (event) => {
       target.textContent = "✓";
       setTimeout(render, 800);
     }
+    if (action === "export-csv") exportCsv();
     if (action === "save-baby") await saveBabyName();
     if (action === "sign-out") await signOutUser();
   } catch (error) {
@@ -1278,10 +1488,10 @@ app.addEventListener("submit", async (event) => {
     if (form.dataset.form === "join-family") await joinFamily(form);
     if (form.dataset.form === "event-care") {
       const data = Object.fromEntries(new FormData(form));
-      const selectedDate = dateFromLocalDateTime(data.eventDate, data.eventTime);
-      if (Number.isNaN(selectedDate.getTime())) return;
+      const timestamp = timestampFromFormData(data);
+      if (!timestamp) return;
       const payload = {
-        timestamp: selectedDate.toISOString(),
+        timestamp,
         note: data.note.trim()
       };
       if (data.eventId) {
@@ -1294,33 +1504,54 @@ app.addEventListener("submit", async (event) => {
     }
     if (form.dataset.form === "event-feed") {
       const data = Object.fromEntries(new FormData(form));
-      await addEvent({
-        type: "feed",
+      const timestamp = timestampFromFormData(data);
+      if (!timestamp) return;
+      const payload = {
+        timestamp,
         feedType: data.feedType,
         amountMl: data.amountMl.trim(),
         note: data.note.trim()
-      });
+      };
+      if (data.eventId) {
+        await updateEvent(data.eventId, payload);
+      } else {
+        await addEvent({ ...payload, type: "feed" });
+      }
       state.sheet = null;
       render();
     }
     if (form.dataset.form === "event-diaper") {
       const data = new FormData(form);
+      const timestamp = timestampFromFormData(Object.fromEntries(data));
+      if (!timestamp) return;
       const pee = data.has("pee");
       const poop = data.has("poop");
       if (!pee && !poop) return;
-      await addEvent({
-        type: "diaper",
+      const payload = {
+        timestamp,
         pee,
         poop,
         consistency: data.get("consistency"),
         note: data.get("note").trim()
-      });
+      };
+      if (data.get("eventId")) {
+        await updateEvent(data.get("eventId"), payload);
+      } else {
+        await addEvent({ ...payload, type: "diaper" });
+      }
       state.sheet = null;
       render();
     }
     if (form.dataset.form === "event-note") {
       const data = Object.fromEntries(new FormData(form));
-      await addEvent({ type: "note", note: data.note.trim() });
+      const timestamp = timestampFromFormData(data);
+      if (!timestamp) return;
+      const payload = { timestamp, note: data.note.trim() };
+      if (data.eventId) {
+        await updateEvent(data.eventId, payload);
+      } else {
+        await addEvent({ ...payload, type: "note" });
+      }
       state.sheet = null;
       render();
     }

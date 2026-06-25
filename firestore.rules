@@ -45,7 +45,16 @@ service cloud.firestore {
         allow create: if isFamilyMember(familyId)
           && request.resource.data.createdBy == request.auth.uid;
         allow update: if isFamilyMember(familyId)
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["timestamp", "note", "updatedAt"]);
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            "timestamp",
+            "note",
+            "feedType",
+            "amountMl",
+            "pee",
+            "poop",
+            "consistency",
+            "updatedAt"
+          ]);
         allow delete: if isFamilyMember(familyId);
       }
     }
